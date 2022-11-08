@@ -2380,7 +2380,9 @@ if __name__ == '__main__':
     pyver_maj = sys.version_info[0]
     pyver_min = sys.version_info[1]
 
-    if (pyver_maj == 3 and pyver_min >= 8) or pyver_maj > 3:
+    if sys.platform == 'win32':
+        multiprocessing.set_start_method('spawn')
+    elif (pyver_maj == 3 and pyver_min >= 8) or pyver_maj > 3:
         multiprocessing.set_start_method('fork')
 
 optparser = optparse.OptionParser(usage="%prog [options] <directories>", version=VERSION)
