@@ -19,6 +19,7 @@ import multiprocessing.sharedctypes
 import optparse
 import os
 import os.path
+import pathlib
 import platform as pform
 import re
 import shutil
@@ -51,6 +52,15 @@ try:
 except KeyError:
     ConfigDefault = "btest.cfg"
 
+def convert_path(path):
+    if sys.platform != 'win32':
+        return path
+
+    os_path = os.path.abspath(path)
+    posix_path = str(pathlib.PureWindowsPath(os_path))
+    drive,destination = posix_path.replace('\\','/').split(':')
+    path = f'/{drive.lower()}{destination}'
+    return path
 
 def output(msg, nl=True, file=None):
     if not file:
@@ -145,7 +155,7 @@ def getOption(key, default, section="btest"):
     except (configparser.NoSectionError, configparser.NoOptionError):
         return default
 
-    return ExpandBackticks(value)
+    return ExpandValue(value)
 
 
 reBackticks = re.compile(r"`(([^`]|\`)*)`")
@@ -171,27 +181,25 @@ def readStateFile():
     return (True, tests)
 
 
-# Expand backticks in a config option value and return the result.
-def ExpandBackticks(origvalue):
-    def _exec(m):
-        cmd = m.group(1)
-        if not cmd:
-            return ""
+def ExpandValue(origvalue):
+    if not origvalue.startswith('expand:'):
+        return origvalue
 
-        try:
-            pp = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-        except OSError as e:
-            error("cannot execute '%s': %s" % (cmd, e))
+    first_colon = origvalue.find(':')
+    if first_colon == -1:
+        return origvalue
 
-        out = pp.communicate()[0]
-        out = out.decode()
+    path = origvalue[first_colon+1:]
 
-        return out.strip()
+    try:
+        pp = subprocess.Popen(['D:\\Program Files\\Git\\bin\\bash', '-c', path], shell=True, stdout=subprocess.PIPE)
+    except OSError as e:
+        error("cannot execute '%s': %s" % (cmd, e))
 
-    value = reBackticks.sub(_exec, origvalue)
+    out = pp.communicate()[0]
+    out = out.decode()
 
-    return value
-
+    return out.strip()
 
 # We monkey-patch the config parser to provide an alternative method that
 # expands backticks in option values and does not include defaults in
@@ -213,8 +221,8 @@ def cpItemsNoDefaults(self, section):
         if not key.startswith("__"):
             # Expand macros such as %(testbase)s.
             value = self.get(section, key)
-            # Expand backticks (if any) in the value.
-            result[key] = ExpandBackticks(value)
+            # Expand values via shell commands if any requested
+            result[key] = ExpandValue(value)
 
     return result.items()
 
